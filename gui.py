@@ -1,4 +1,4 @@
-
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox,Radiobutton
 from models import Operation
@@ -6,215 +6,180 @@ from datetime import datetime
 from storage import save_operations, load_operations  
 from analysis import analyze_operations
 from utiils import validate_date,validate_amount
-
-# def calculate():
-#     # """Вычисляет произведение количества и цены."""
-#     try:
-#         quantity = float(quantity_entry.get())
-#         price = float(price_entry.get())
-#         print(price)
-#         result = quantity * price
-#         calculated_value_label.config(text=str(result))
-#     except ValueError:
-#         messagebox("Ошибка ввода")
-
-
-# def add_operation():
-#     # quantity=q
-#     # price=self.price_entry.get()
-#     if not validate_amount(self.price_entry.get()):
-#         messagebox("Ошибка! Некоррректная цена")
-#         return
-        
-#     if not validate_amount(quantity_entry.get()):
-#         messagebox("Ошибка! Некоррректное количество")
-#         return
-        
-#     try:
-#         op=Operation(
-#             self.name_entry.get(),
-#             self.category_entry.get(),
-#             self.operation_type , # 'incoming' or 'outgoing'
-#             self.date_entry,
-#             self.comment_entry.get(),
-#             self.quantity_entry,
-#             self.price_entry,
-#             self.total_cost_entry
-#         )
-            
-#     except ValueError as e:
-#         messagebox.showerror("Ошибка",str(e))
-#         return
-#     self.Operation.append(op)
-#     save_operations(self.Operation)
-#     messagebox.showinfo("Операция добавлена")
-
-#     def show_operations(self):
-#         # Logic for displaying operations  
-#         pass
-
-#     def analyze(self):
-#         df = analyze_operations(self.operations)
-#         # Visualization logic  
-#         plot_pie_by_category(df,"incoming")
-#         plot_pie_by_category(df,"outgoing")
+import psycopg2
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 
 class WarehouseApp:
+
     def __init__(self, root):
-        print("1/")
-        # self.root = root  
-        # self.root.title("Складской учет")
-        # self.operations = load_operations()
+        self.root = root  
+        self.root.title("Складской учет")
+        self.data = load_operations()
 
+       # Дата
 
-        # root = tk.Tk()
+        self.date_label = tk.Label(root, text=datetime.now().strftime("%d.%m.%Y"), width=20)
 
-        root.title("Учет операций")
-
-        # Дата
-
-        date_label = tk.Label(root, text=datetime.now().strftime("%d.%m.%Y"), width=20)
-
-        date_label.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+        self.date_label.grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
 
         # Тип операции
+        self.operation_type = tk.StringVar()
+        self.operation_type.set("Поступление")
 
-        operation_var = tk.StringVar()
+        self.operation_radio_in = tk.Radiobutton(root, text="Поступление", variable=self.operation_type, value="Поступление")
 
-        operation_radio_in = tk.Radiobutton(root, text="Поступление", variable=operation_var, value="Поступление")
+        self.operation_radio_out = tk.Radiobutton(root, text="Отпуск", variable=self.operation_type, value="Отпуск")
 
-        operation_radio_out = tk.Radiobutton(root, text="Отпуск", variable=operation_var, value="Отпуск")
+        self.operation_radio_in.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
 
-        operation_radio_in.grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
-
-        operation_radio_out.grid(row=1, column=2, sticky=tk.W, padx=5, pady=5)
+        self.operation_radio_out.grid(row=1, column=2, sticky=tk.W, padx=5, pady=5)
 
         # Наименование
 
-        name_label = tk.Label(root, text="Наименование:")
+        self.name_label = tk.Label(root, text="Наименование:")
 
-        name_label.grid(row=2, column=0, sticky=tk.E, padx=5, pady=5)
+        self.name_label.grid(row=2, column=0, sticky=tk.E, padx=5, pady=5)
 
-        name_entry = tk.Entry(root)
+        self.name_entry = tk.Entry(root)
 
-        name_entry.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
+        self.name_entry.grid(row=2, column=1, sticky=tk.W, padx=5, pady=5)
 
-        # Комментарий
-
-        comment_label = tk.Label(root, text="Комментарий:")
-
-        comment_label.grid(row=3, column=0, sticky=tk.E, padx=5, pady=5)
-
-        comment_entry = tk.Entry(root)
-
-        comment_entry.grid(row=3, column=1, sticky=tk.W, padx=5, pady=5)
-
+ 
         # Тип товара
 
-        item_type_label = tk.Label(root, text="Тип:")
+        self.item_type_label = tk.Label(root, text="Тип:")
 
-        item_type_label.grid(row=4, column=0, sticky=tk.E, padx=5, pady=5)
+        self.item_type_label.grid(row=4, column=0, sticky=tk.E, padx=5, pady=5)
 
-        item_type_combo = ttk.Combobox(root, values=["Продукты", "Товары"])
+        self.item_type_combo = ttk.Combobox(root, values=["Продукты", "Товары"])
 
-        item_type_combo.grid(row=4, column=1, sticky=tk.W, padx=5, pady=5)
+        self.item_type_combo.grid(row=4, column=1, sticky=tk.W, padx=5, pady=5)
 
         # Количество
 
-        quantity_label = tk.Label(root, text="Количество:")
+        self.quantity_label = tk.Label(root, text="Количество:")
 
-        quantity_label.grid(row=5, column=0, sticky=tk.E, padx=5, pady=5)
+        self.quantity_label.grid(row=5, column=0, sticky=tk.E, padx=5, pady=5)
 
-        quantity_entry = tk.Entry(root)
+        # global quantity_entry_0
+        
+        self.quantity_entry=tk.Entry(root)   
+        quantity_entry_0 = float(self.quantity_entry.get()) if self.quantity_entry.get() != '' else 0.0
 
-        quantity_entry.grid(row=5, column=1, sticky=tk.W, padx=5, pady=5)
+        self.quantity_entry.grid(row=5, column=1, sticky=tk.W, padx=5, pady=5)
 
         # Цена
 
-        price_label = tk.Label(root, text="Цена:")
+        self.price_label = tk.Label(root, text="Цена:")
 
-        price_label.grid(row=6, column=0, sticky=tk.E, padx=5, pady=5)
+        self.price_label.grid(row=6, column=0, sticky=tk.E, padx=5, pady=5)
 
-        price_entry = tk.Entry(root)
+        # global price_entry_0
+        self.price_entry = tk.Entry(root)
+        price_entry_0 = float(self.price_entry.get()) if self.price_entry.get() != '' else 0.0
+    
+        self.price_entry.grid(row=6, column=1, sticky=tk.W, padx=5, pady=5)
 
-        price_entry.grid(row=6, column=1, sticky=tk.W, padx=5, pady=5)
 
-        # Расчетное поле
+
+        def calculate():
+            try:
+                quantity = validate_amount(self.quantity_entry.get()) if self.quantity_entry.get() != '' else 0.0
+                price = validate_amount(self.price_entry.get()) if self.price_entry.get() != '' else 0.0
+                result = quantity * price
+ 
+                self.calculated_value_label = tk.Label(root, text=str(result))
+                self.calculated_value_label.grid(row=7, column=1, sticky=tk.W, padx=5, pady=5)
+
+            except ValueError:
+
+                calculated_value_label_0.config(text="Ошибка ввода")
+
+        
+
+      # Расчетное поле
 
         calculate_button = tk.Button(root, text="Рассчитать", command=calculate)
 
         calculate_button.grid(row=7, column=0, sticky=tk.E, padx=5, pady=5)
 
-        calculated_value_label = tk.Label(root, text="0.0")
+        # global calculated_value_label_0
+        self.calculated_value_label = tk.Label(root, text="0.0")
+        calculated_value_label_0 = self.calculated_value_label
+        self.calculated_value_label.grid(row=7, column=1, sticky=tk.W, padx=5, pady=5)
 
-        calculated_value_label.grid(row=7, column=1, sticky=tk.W, padx=5, pady=5)
 
-        # Кнопка сохранения
+        def add_operation():
+            print("Start saving...")
+            try:
+                op=Operation(
+                    str(self.operation_type.get()) , # 'incoming' or 'outgoing'
+                    str(self.date_label.cget("text")),
+                    str(self.item_type_combo.get()),
+                    str(self.name_entry.get()),
+                    str(self.calculated_value_label.cget("text")),
+                    str(self.quantity_entry.get()),
+                    str(self.price_entry.get())
+                )
+                 
+            except ValueError as e:
+                messagebox.showerror("Ошибка",str(e))
+                return
+            
+            df = self.data
 
-        save_button = tk.Button(root, text="Сохранить", command=save_data)
+            df["quantity"] = df["quantity"].astype(int)
+            found = df.index[(df["name"] == self.name_entry.get()) & (df["item_tp"] == self.item_type_combo.get())].tolist()
+            # print("Found:", found)
+            # print("N", str(self.name_entry.get()))
+            # print("name", self.name_entry, "type", self.item_type_combo)
+            if len(found) == 1:
+                index = found[0]
 
+                if self.item_type_combo.get() == "Отпуск":
+                    if int(df["quantity"][index]) >= int(self.quantity_entry.get()):
+                        df["quantity"][index] -= int(self.quantity_entry.get())
+                    else: raise ValueError(f"Недостаточно количества  {self.name.get()}")
+                elif self.item_type_combo.get() == "Поступление":
+                    df["quantity"][index] += int(self.quantity_entry.get())
+
+            DATA_DIR="./data"
+            CSV_FILE=os.path.join(DATA_DIR,"Products.csv")
+            df.to_csv(CSV_FILE, index=False )
+
+            # self.Operation.append(op)
+            save_operations(op)
+            messagebox.showinfo("Операция добавлена")
+
+
+        def export_to_excel():
+            DATA_DIR="./data"
+            Excel_FILE=os.path.join(DATA_DIR,"Products.xlsx")
+            # file_name = 'Products.xlsx'
+            df = self.data
+            try:
+                # index=False, чтобы не записывать индекс DataFrame в файл
+                df.to_excel(Excel_FILE, index=False)
+                print(f"Данные успешно экспортированы в {Excel_FILE}")
+            except Exception as e:
+                print(f"Ошибка при экспорте: {e}")
+ 
+        def analyze():
+            df = analyze_operations(self.data)
+
+        def analyze_prod_():
+            df = analyze_prod(self.data)
+      
+       
+        save_button = tk.Button(root, text="Добавить запись", command=add_operation)
         save_button.grid(row=8, column=1, sticky=tk.E, padx=5, pady=5)
 
+        export_to_excel = tk.Button(root, text="Экспорт в Excel", command=export_to_excel)
+        export_to_excel.grid(row=10, column=1, sticky=tk.E, padx=5, pady=5)
 
-def save_data():
-
-    # Получение данных из полей
-    date = date_label.cget("text")
-
-    operation_type = operation_var.get()
-
-    name = name_entry.get()
-
-    comment = comment_entry.get()
-
-    item_type = item_type_combo.get()
-
-    quantity = quantity_entry.get()
-
-    price = price_entry.get()
-
-    calculated_value = calculated_value_label.cget("text")
-
-    # Проверка на заполненность обязательных полей
-
-    if not all([operation_type, name, item_type, quantity, price]):
-
-        messagebox.showerror("Ошибка", "Пожалуйста, заполните все обязательные поля: Операция, Наименование, Тип, Количество, Цена.")
-
-        return
-
-    # Сохранение данных в CSV
-
-    try:
-
-        with open('data.csv', 'a', newline='') as csvfile:
-
-            writer = csv.writer(csvfile)
-
-            writer.writerow([date, operation_type, name, comment, item_type, quantity, price, calculated_value])
-
-        messagebox.showinfo("Успех", "Данные успешно сохранены!")
-
-    except Exception as e:
-
-        messagebox.showerror("Ошибка", f"Ошибка при сохранении данных: {e}")
-
-# Функция для расчета значения
-
-def calculate():
-
-    try:
-
-        quantity = float(quantity_entry.get())
-
-        price = float(price_entry.get())
-
-        result = quantity * price
-
-        calculated_value_label.config(text=str(result))
-
-    except ValueError:
-
-        calculated_value_label.config(text="Ошибка ввода")
-
+        analyze_button = tk.Button(root, text="Анализ по типу операции", command=analyze)
+        analyze_button.grid(row=12, column=1, sticky=tk.E, padx=5, pady=5)
+   
